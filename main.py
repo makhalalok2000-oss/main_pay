@@ -3,55 +3,66 @@ import re
 
 app = FastAPI()
 
-user_data = {}
-
-def apply_cleaning(text, to_lower=False, remove_newlines=False, normalize_spaces=False, remove_symbols=False):
-    if to_lower: text = text.lower()
-    if remove_newlines: text = text.replace("\n", " ").replace("\t", " ")
-    if remove_symbols: text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
-    if normalize_spaces: text = " ".join(text.split())
+def apply_cleaning(
+    text: str,
+    remove_newlines: bool = False,
+    normalize_spaces: bool = False,
+    remove_symbols: bool = False,
+    to_lower: bool = False,
+):
+    if remove_newlines:
+        text = text.replace("\n", " ").replace("\t", " ")
+    if remove_symbols:
+        text = re.sub(r"[^a-zA-Z0-9 ]", "", text)
+    if normalize_spaces:
+        text = " ".join(text.split())
+    if to_lower:
+        text = text.lower()
     return text
 
+
 @app.post("/process")
-def process_text(user_id: str = Body(...), input_text: str = Body(...)):
-    if user_id not in user_data:
-        user_data[user_id] = {"original_text": input_text, "current_step": 1}
+def process_text(
+    input_text: str = Body(...),
+
+    # FIRST / ROOT decision
+    clean_all: bool = Body(...),
+
+    # Custom options (used ONLY if clean_all = false)
+    remove_space_newline: bool = Body(False),
+    remove_symbols: bool = Body(False),
+    to_lowercase: bool = Body(False),
+):
+    # 🔴 HARD STOP PATH
+    if clean_all:
+        final_text = apply_cleaning(
+            input_text,
+            remove_newlines=True,
+            normalize_spaces=True,
+            remove_symbols=True,
+            to_lower=True,
+        )
         return {
-            "question": "Choose: (1) Clean everything at once? (Type 'all') OR (2) Clean step-by-step? (Type 'step')"
+            "status": "complete",
+            "mode": "clean_all",
+            "result": final_text,
         }
 
-    session = user_data[user_id]
-    step = session["current_step"]
-    user_choice = input_text.lower()
+    # 🟢 CUSTOM PATH
+    final_text = apply_cleaning(
+        input_text,
+        remove_newlines=remove_space_newline,
+        normalize_spaces=remove_space_newline,
+        remove_symbols=remove_symbols,
+        to_lower=to_lowercase,
+    )
 
-    if step == 1:
-        if "all" in user_choice:
-            final_result = apply_cleaning(session["original_text"], to_lower=True, remove_newlines=True, normalize_spaces=True, remove_symbols=True)
-            del user_data[user_id]
-            return {"status": "Complete", "result": final_result}
-        else:
-            session["current_step"] = 2
-            return {"question": "Q1: Remove newlines and extra spaces? (yes/no)"}
+    return {
+        "status": "complete",
+        "mode": "custom",
+        "result": final_text,
+    }
 
-    if step == 2:
-        if "yes" in user_choice:
-            session["original_text"] = apply_cleaning(session["original_text"], remove_newlines=True, normalize_spaces=True)
-        session["current_step"] = 3
-        return {"question": "Q2: Remove all special symbols? (yes/no)"}
-
-    if step == 3:
-        if "yes" in user_choice:
-            session["original_text"] = apply_cleaning(session["original_text"], remove_symbols=True)
-        session["current_step"] = 4
-        return {"question": "Q3: Convert text to lowercase? (yes/no)"}
-
-    if step == 4:
-        final_text = session["original_text"]
-        if "yes" in user_choice:
-            final_text = apply_cleaning(final_text, to_lower=True)
-
-        del user_data[user_id]
-        return {"status": "Finalized", "result": final_text}
 
 @app.get("/")
 def root():
