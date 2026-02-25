@@ -1,7 +1,16 @@
-from fastapi import FastAPI, Body
+from fastapi import FastAPI, Body, Header
+from fastapi.middleware.cors import CORSMiddleware
 import re
 
 app = FastAPI()
+
+# ✅ REQUIRED for RapidAPI browser console
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 def apply_cleaning(
     text: str,
@@ -32,7 +41,15 @@ def process_text(
     remove_space_newline: bool = Body(False),
     remove_symbols: bool = Body(False),
     to_lowercase: bool = Body(False),
+
+    # ✅ RapidAPI headers (accepted, not used)
+    x_rapidapi_key: str = Header(None),
+    x_rapidapi_host: str = Header(None),
 ):
+    # ✅ Safety check (minimal)
+    if not input_text.strip():
+        return {"status": "error", "message": "input_text cannot be empty"}
+
     # 🔴 HARD STOP PATH
     if clean_all:
         final_text = apply_cleaning(
